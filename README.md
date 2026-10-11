@@ -1,95 +1,98 @@
 # Mirage
 
-Mirage 让经由代理 VPS 发出的流量，在 L4 到 L7 的每一层都呈现同一个身份：一台使用原版 Chrome 的 macOS 桌面电脑。
+English | [简体中文](README.zh-CN.md)
 
-本地浏览器保持零篡改，不注入 JS，不改写 Canvas、WebGL 或字体，也不编译定制内核。TLS、HTTP/2 和 JS 环境本身就是真 Mac 的，Mirage 只改造浏览器管不到的两个缺口：VPS 出站 TCP 握手暴露的 Linux 协议栈特征，以及代理链路造成的 RTT 撕裂。
+Mirage makes traffic that leaves a proxy VPS present one identity at every layer from L4 to L7: a macOS desktop running stock Chrome.
 
-## 原理
+The local browser is left untouched. There is no JS injection, no Canvas, WebGL or font spoofing, and no custom browser build. TLS, HTTP/2 and the JS environment already come from a real Mac. Mirage fixes the two gaps a browser cannot control: the Linux TCP stack fingerprint exposed by the VPS's outbound handshake, and the RTT mismatch introduced by the proxy hop.
+
+## How it works
 
 ```
-Mac                                         VPS (Linux)                              目标网站
-原版 Chrome (TZ / lang 对齐出口)
-  -> mihomo / sing-box TUN  ==VLESS REALITY==>  mirage-singbox (出站 SO_MARK 0x4d49)
-     IPv6 关闭, UDP 443 拒绝,                     |-> mirage-syn  SYN 重排为 Darwin 形态 ---> L4 判定 macOS
-     DNS 走隧道                                   |-> mirage-rtt  ACK 信息整体延迟 -------> TCP RTT = 真实远端 RTT
+Mac                                         VPS (Linux)                              Target site
+stock Chrome (TZ / lang aligned to egress)
+  -> mihomo / sing-box TUN  ==VLESS REALITY==>  mirage-singbox (outbound SO_MARK 0x4d49)
+     IPv6 off, UDP 443 rejected,                  |-> mirage-syn  SYN reshaped to Darwin --> L4 reads macOS
+     DNS through the tunnel                       |-> mirage-rtt  ACK information delayed -> TCP RTT = real client RTT
 ```
 
-两个整形组件只处理带 mark 的流量，VPS 上的其他连接（SSH、别的服务）不受影响，也不修改任何载荷。
+Both shapers act only on marked traffic. Other connections on the VPS (SSH, other services) are never touched, and no payload is ever modified.
 
-mirage-syn（nftables + NFQUEUE，Go）把出站 SYN 改写成 macOS 15 的真机形态。改写依据是从真实 Mac 抓到的包（`captures/macos_syn.txt`），具体包括：窗口 65535；选项顺序 `mss, nop, wscale, nop, nop, TS, sackOK, eol` 并补齐到 24 字节；IP ID 置 0。wscale 6 不改写包内字段，而是通过 sysctl 让内核自己通告，保证内核连接状态与报文一致。p0f 实测：原生判定为 `Linux 2.2.x-3.x`，改写后为 `Mac OS X`。
+mirage-syn (nftables + NFQUEUE, Go) rewrites outbound SYNs into the shape of a real macOS 15 machine, based on packets captured from a real Mac (`captures/macos_syn.txt`): window 65535; options in the order `mss, nop, wscale, nop, nop, TS, sackOK, eol`, padded to 24 bytes; IP ID set to 0. wscale 6 is not rewritten in the packet. A sysctl fragment makes the kernel announce it itself, so kernel connection state always matches the wire. Measured with p0f: native traffic is classified as `Linux 2.2.x-3.x`, rewritten traffic as `Mac OS X`.
 
-mirage-rtt（eBPF tc egress + fq 的 EDT 发送时间戳）让目标站在 TCP 层测到的 RTT 等于客户端到 VPS 的真实 RTT。它的规则分三条：握手阶段把第三次 ACK 和紧随的 ClientHello 一起推迟；纯 ACK 按"流基准延迟 + AR(1) 相关抖动"延迟，并严格保持单调；数据段按原时机发出，但其中的 ACK 号、TSecr 和窗口字段改写为已经"离开"延迟路径的值，这样全双工场景下 `min_rtt` 也不会塌到机房延迟。基准延迟默认根据入站连接的 TCP_INFO 自动测量。
+mirage-rtt (eBPF tc egress + fq Earliest Departure Time) makes the RTT the target measures at the TCP layer equal the real client-to-VPS RTT. It follows three rules. During the handshake, the third ACK and the ClientHello right behind it are held together. Pure ACKs are delayed by a per-flow base delay plus AR(1)-correlated jitter, strictly monotonic. Data segments leave at their natural time, but their ACK number, TSecr and window are rewritten to the values that have already departed on the delayed path, so `min_rtt` does not collapse to datacenter latency even under full-duplex traffic. By default the base delay is measured automatically from TCP_INFO of inbound connections.
 
-## 安装
+## Install
 
 ### VPS
 
-要求 Debian 12 / Ubuntu 22.04 及以上，amd64 或 arm64，具备 root 权限。
+Debian 12 / Ubuntu 22.04 or newer, amd64 or arm64, root access.
 
 ```sh
 git clone <repo> mirage && cd mirage
 sudo ./install-vps.sh
 ```
 
-安装器会完成以下工作：编译两个整形组件（缺 Go 时下载固定版本和校验和的官方工具链到 `/opt/mirage/go`）；部署一个独立的 `mirage-singbox.service`（VLESS + REALITY，无需域名和证书）；写入 sysctl 片段；启动 systemd 服务。它不会改动机器上已有的 sing-box、xray 或其他代理服务。结束时会打印客户端画像，并写入 `/etc/mirage/client/mirage.yaml`。
+The installer builds both shapers (if Go is missing it downloads a pinned, checksum-verified official toolchain into `/opt/mirage/go`), deploys a separate `mirage-singbox.service` (VLESS + REALITY, no domain or certificate needed), installs the sysctl fragment and starts the systemd services. It never modifies an existing sing-box, xray or other proxy service. At the end it prints the client profile and writes it to `/etc/mirage/client/mirage.yaml`.
 
-常用参数：`--port N`、`--sni HOST[:PORT]`、`--no-rtt`、`--dry-run`、`--status`（含一次真实网卡上的 SYN 形态自检）、`--show-client`、`--uninstall`（按安装记录精确回滚）。
+Common options: `--port N`, `--sni HOST[:PORT]`, `--no-rtt`, `--dry-run`, `--status` (includes a SYN shape self-test on the real interface), `--show-client`, `--uninstall` (exact rollback from the install record).
 
-注意事项：
+Notes:
 
-1. 云防火墙需要放行所选端口，脚本不会修改云防火墙。
-2. 网卡 MTU 低于 1500 时（GCP 默认 1460），SYN 只能通告 `MTU-40` 的 MSS，安装器会给出警告。在 GCP 上执行 `gcloud compute networks update <vpc> --mtu=1500` 并重启实例后，才能通告 macOS 典型的 1460。
-3. mirage-rtt 需要把出口网卡的 qdisc 换成 fq，且只有在能生成精确回滚方案时才会安装，否则自动降级为仅启用 mirage-syn 并发出警告。GCP 实例在 MTU 调整前的 qdisc 布局属于不能精确回滚的情况。
-4. mirage-singbox 通过 `BindsTo=` 绑定整形服务，任一整形服务退出时代理随之停止。NFQUEUE 规则本身带 `bypass`，守护进程崩溃不会造成断网，服务级联动则保证不会以原生 Linux 指纹继续出站。
-5. sysctl 片段会把全局 `tcp_rmem` 与 `rmem_max` 上限降到 2 MiB，以得到 wscale 6。单流吞吐上限因此约为 2 MiB / RTT，这与真实远端客户端的表现一致。
+1. Your cloud firewall must allow the chosen port. The script never changes cloud firewalls.
+2. When the interface MTU is below 1500 (GCP defaults to 1460), the SYN can only announce an MSS of `MTU-40`, and the installer warns about it. On GCP, run `gcloud compute networks update <vpc> --mtu=1500` and reboot the instance to announce the macOS-typical 1460.
+3. mirage-rtt replaces the egress interface's qdisc with fq, and installs only when it can generate an exact rollback. Otherwise it falls back to mirage-syn only and prints a warning. A GCP instance whose MTU has not been raised yet is one such case.
+4. mirage-singbox is tied to the shapers with `BindsTo=`: if either shaper exits, the proxy stops too. The NFQUEUE rule itself uses `bypass`, so a crashed daemon never blackholes traffic; the service-level binding makes sure traffic never continues with the native Linux fingerprint.
+5. The sysctl fragment lowers the global `tcp_rmem` and `rmem_max` ceilings to 2 MiB to obtain wscale 6. Single-flow throughput is therefore capped at about 2 MiB / RTT, which matches how a genuine distant client behaves.
 
 ### Mac
 
-要求 macOS 13 及以上，默认路径不需要 sudo。
+macOS 13 or newer. The default path needs no sudo.
 
 ```sh
 git clone <repo> mirage && cd mirage
-./install-local.sh --import <mirage.yaml 的路径或 https 地址>
+./install-local.sh --import <path or https URL of mirage.yaml>
 ```
 
-画像文件本身是一份合法的 mihomo 配置，规则包括：TUN、仅 IPv4、优先拒绝 UDP 443 以禁用 QUIC、DNS 经隧道走 DoH、单一出口。除此之外多一个顶层 `mirage:` 段，内容为出口 IP、时区、语言和画像名，mihomo 会忽略这一段。把同一份文件导入 Clash Verge Rev 或 mihomo 并开启 TUN 后，运行：
+The profile is a valid mihomo config: TUN, IPv4 only, UDP 443 rejected first to disable QUIC, DNS via DoH through the tunnel, a single exit. It adds one top-level `mirage:` section (egress IP, time zone, language, profile name) that mihomo ignores. Import the same file into Clash Verge Rev or mihomo, enable TUN, then run:
 
 ```sh
-mirage-launch            # 启动对齐后的独立 Chrome 实例
-mirage-launch --print    # 只打印解析后的命令
-mirage-launch --check    # 检查出口 IP、时区和 IPv6 可达性
+mirage-launch            # start the aligned, separate Chrome instance
+mirage-launch --print    # print the resolved command only
+mirage-launch --check    # check egress IP, time zone and IPv6 reachability
 ```
 
-`mirage-launch` 启动前会校验当前出口 IP 是否等于画像中的 `expect_egress`，不一致就拒绝启动（隧道未生效或节点不对时，不会裸连）。Chrome 以 `TZ=<时区>` 直接 exec 启动；macOS 上的 Chrome 认这个环境变量，已实测验证。启动参数为 `--lang`、`--accept-lang`、`--disable-quic`、`--enforce-webrtc-ip-permission-check`，使用独立的 `--user-data-dir`，不开放调试端口，也不修改系统时区和你正在使用的 Chrome。
+Before launching, `mirage-launch` checks that the current egress IP equals `expect_egress` from the profile and refuses to start if it does not, so a missing tunnel or wrong node never results in a direct connection. Chrome is exec'd directly with `TZ=<zone>`; Chrome on macOS honors this variable, which was verified by experiment. It is started with `--lang`, `--accept-lang`, `--disable-quic`, `--enforce-webrtc-ip-permission-check` and its own `--user-data-dir`. No debugging port is opened, and neither the system time zone nor your everyday Chrome is changed.
 
-`--with-mihomo` 会下载固定版本的官方 mihomo 到 `~/.mirage/bin`，并打印启动 TUN 所需的 sudo 命令，脚本本身从不执行 sudo。
+`--with-mihomo` downloads a pinned official mihomo into `~/.mirage/bin` and prints the sudo command needed to start TUN. The script never runs sudo itself.
 
-## 仓库结构
+## Repository layout
 
 ```
-mangler/syn/   mirage-syn：SYN 改写、nft 规则、sysctl 片段、systemd 单元、netns 集成测试
-mangler/rtt/   mirage-rtt：eBPF 程序（预生成的 .o 已提交，构建只需 Go）、守护进程、qdisc 安装与回滚、netns 集成测试
-server/        sing-box 服务端模板与 mirage-singbox.service
-launcher/      mirage-launch、配置示例、mihomo / sing-box 客户端模板
-captures/      作为改写依据的真实 macOS SYN 抓包
-tools/         抓取 macOS 与 VPS 原生 SYN 的脚本
+mangler/syn/   mirage-syn: SYN rewrite, nft rules, sysctl fragment, systemd unit, netns integration test
+mangler/rtt/   mirage-rtt: eBPF program (pre-generated .o committed, building needs only Go), daemon,
+               qdisc install and rollback, netns integration test
+server/        sing-box server template and mirage-singbox.service
+launcher/      mirage-launch, config example, mihomo / sing-box client templates
+captures/      the real macOS SYN capture the rewrite is based on
+tools/         scripts that capture macOS and native VPS SYNs
 ```
 
-## 测试
+## Tests
 
 ```sh
 cd mangler/syn && go vet ./... && go test ./...
 cd mangler/rtt && go vet ./... && go test ./...
-sudo bash mangler/syn/test/netns_test.sh   # Linux，root，只使用私有 netns
+sudo bash mangler/syn/test/netns_test.sh   # Linux, root, private netns only
 sudo bash mangler/rtt/test/netns_test.sh
 ```
 
-mirage-rtt 的 netns 测试在 160 ms 基准延迟下覆盖以下内容：握手 RTT、50 MiB 下载（srtt、重传、ACK 乱序）、请求响应中应用层与 TCP 层 RTT 的一致性、未标记流量的隔离、抖动统计（标准差与 lag-1 自相关）、吞吐对照、全双工与无间隔重叠请求下的 `min_rtt` 下限及 ACK 和 TSecr 无回退（offload 开关两种情况都测）、多队列 qdisc 的精确回滚，以及测试后宿主机状态不变。
+The mirage-rtt netns test, at a 160 ms base delay, covers: handshake RTT; a 50 MiB download (srtt, retransmits, ACK reordering); agreement of application-level and TCP-level RTT in request/response traffic; isolation of unmarked traffic; jitter statistics (standard deviation and lag-1 autocorrelation); throughput comparison; the `min_rtt` floor and absence of ACK/TSecr regressions under full-duplex and back-to-back overlapping requests, with offloads both on and off; exact rollback of multi-queue qdiscs; and an unchanged host after the test.
 
-## 已知限制
+## Known limitations
 
-1. v1 只支持 IPv4。带 mark 的 IPv6 SYN 默认直接丢弃（fail closed）。
-2. VPS 的 IP 归属（机房 ASN）无法通过协议层改变，要做到"家庭用户"需要选择 ISP 或住宅线路。
-3. 主动探测（例如对 VPS 公网 IP 执行 `nmap -O`）看到的仍是 Linux 协议栈，需要用防火墙收紧入站端口。
-4. 数据段中的 SACK 块会被原样保留，可能比延迟后的累计 ACK 更新。
-5. mirage-rtt 的 qdisc 安装依赖能生成精确回滚，非默认布局的网卡会被拒绝。
+1. v1 is IPv4 only. Marked IPv6 SYNs are dropped by default (fail closed).
+2. The VPS IP's ownership (a hosting ASN) cannot be changed at the protocol level. Looking like a home user requires an ISP or residential line.
+3. Active probing of the VPS public IP (for example `nmap -O`) still sees the Linux stack. Restrict inbound ports with a firewall.
+4. SACK blocks in data segments are kept as is and may be fresher than the delayed cumulative ACK.
+5. mirage-rtt's qdisc install requires an exact rollback; interfaces with non-default layouts are refused.

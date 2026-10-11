@@ -95,3 +95,7 @@ mirage-rtt 的 netns 测试在 160 ms 基准延迟下覆盖以下内容：握手
 3. 主动探测（例如对 VPS 公网 IP 执行 `nmap -O`）看到的仍是 Linux 协议栈，需要用防火墙收紧入站端口。
 4. 数据段中的 SACK 块会被原样保留，可能比延迟后的累计 ACK 更新。
 5. mirage-rtt 的 qdisc 安装依赖能生成精确回滚，非默认布局的网卡会被拒绝。
+
+## 许可证
+
+[GPL-3.0](LICENSE)。`mangler/rtt/internal/shaper/bpf.c` 中的 eBPF 程序声明为 GPL，这是内核允许它调用所用 helper 的前提。

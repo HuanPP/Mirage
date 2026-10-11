@@ -96,3 +96,7 @@ The mirage-rtt netns test, at a 160 ms base delay, covers: handshake RTT; a 50 M
 3. Active probing of the VPS public IP (for example `nmap -O`) still sees the Linux stack. Restrict inbound ports with a firewall.
 4. SACK blocks in data segments are kept as is and may be fresher than the delayed cumulative ACK.
 5. mirage-rtt's qdisc install requires an exact rollback; interfaces with non-default layouts are refused.
+
+## License
+
+[GPL-3.0](LICENSE). The eBPF program in `mangler/rtt/internal/shaper/bpf.c` declares the GPL license, which the kernel requires for the helpers it uses.

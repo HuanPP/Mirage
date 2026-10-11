@@ -29,7 +29,7 @@ mirage-rtt（eBPF tc egress + fq 的 EDT 发送时间戳）让目标站在 TCP �
 要求 Debian 12 / Ubuntu 22.04 及以上，amd64 或 arm64，具备 root 权限。
 
 ```sh
-git clone <repo> mirage && cd mirage
+git clone https://github.com/HuanPP/Mirage.git mirage && cd mirage
 sudo ./install-vps.sh
 ```
 
@@ -50,7 +50,7 @@ sudo ./install-vps.sh
 要求 macOS 13 及以上，默认路径不需要 sudo。
 
 ```sh
-git clone <repo> mirage && cd mirage
+git clone https://github.com/HuanPP/Mirage.git mirage && cd mirage
 ./install-local.sh --import <mirage.yaml 的路径或 https 地址>
 ```
 

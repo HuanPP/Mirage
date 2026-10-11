@@ -29,7 +29,7 @@ mirage-rtt (eBPF tc egress + fq Earliest Departure Time) makes the RTT the targe
 Debian 12 / Ubuntu 22.04 or newer, amd64 or arm64, root access.
 
 ```sh
-git clone <repo> mirage && cd mirage
+git clone https://github.com/HuanPP/Mirage.git mirage && cd mirage
 sudo ./install-vps.sh
 ```
 
@@ -50,7 +50,7 @@ Notes:
 macOS 13 or newer. The default path needs no sudo.
 
 ```sh
-git clone <repo> mirage && cd mirage
+git clone https://github.com/HuanPP/Mirage.git mirage && cd mirage
 ./install-local.sh --import <path or https URL of mirage.yaml>
 ```
 

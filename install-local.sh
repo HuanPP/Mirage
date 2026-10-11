@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Mirage macOS installer. No root. Does not touch the owner's Chrome, proxies,
-# or network settings.
+# Mirage macOS installer. Runs without root; your Chrome, proxies and network
+# settings stay as they are.
 set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")" && pwd)
@@ -25,14 +25,14 @@ Usage: ./install-local.sh --import <path-or-https-URL> [--with-mihomo]
        ./install-local.sh --help
 
 Install the Mirage Chrome launcher on this Mac (macOS 13+, arm64 or x86_64).
-Never uses sudo.
+Runs without sudo.
 
   --import X     Fetch or copy a Mirage profile YAML (file path or https URL),
                  store it as ~/.config/mirage/profiles/<profile>.yaml, parse the
                  top-level mirage: section, and write ~/.config/mirage/launcher.conf.
   --with-mihomo  Download the pinned official mihomo darwin binary into
-                 ~/.mirage/bin. Prints the sudo command to start TUN; never
-                 runs sudo.
+                 ~/.mirage/bin. Prints the sudo command that starts TUN
+                 for you to run.
   --uninstall    Remove only files and the symlink this script created.
   --help         Show this help.
 
@@ -301,7 +301,7 @@ install_mihomo() {
   fi
   cat <<EOF
 
-Start TUN yourself (this installer never runs sudo):
+Start TUN yourself with sudo:
   sudo ${dest} -d ${CONFIG_DIR}/mihomo -f ${yaml}
 
 EOF

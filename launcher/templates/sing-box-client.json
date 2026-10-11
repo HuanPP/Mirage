@@ -2,10 +2,6 @@
 // This file is a copy-and-fill template. Copy it out of the repo and replace
 // the SERVER, PORT, UUID, PUBLIC_KEY, SHORT_ID, SNI placeholders with real
 // values, then pass the copy to sing-box.
-// It does not write anything to disk by itself and does not change the
-// running system.
-// It never touches system DNS files (/etc/resolv.conf, mDNSResponder),
-// other apps, the VPS, or Chrome.
 // <SERVER> in the DIRECT ip_cidr exception must be the proxy's IPv4 address.
 {
   "log": {

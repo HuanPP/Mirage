@@ -4,7 +4,7 @@
 # If the conf file is missing, mirage-launch uses the defaults shown here.
 
 # Profile name. Default Chrome user-data-dir is ~/.mirage/profiles/<profile>
-# This is a throwaway profile; it is never the owner's existing Chrome profile.
+# It is a separate profile, apart from your everyday Chrome.
 # profile=us-west
 
 # IANA timezone, or "auto".
@@ -13,10 +13,10 @@
 #   https://ipapi.co/timezone
 #   https://worldtimeapi.org/api/ip   (JSON; uses .timezone)
 #   http://ip-api.com/line?fields=timezone
-# Validated against /usr/share/zoneinfo. Never falls back to this Mac's zone.
-# Chrome is exec'd with TZ=<zone> (ICU on this macOS honors TZ when exec'd
-# directly). This script never runs `sudo systemsetup -settimezone` and never
-# changes /etc/localtime.
+# The answer is validated against /usr/share/zoneinfo. If every endpoint fails,
+# the launch stops instead of using this Mac's own zone.
+# Chrome is exec'd with TZ=<zone>, which macOS Chrome honors; the system time
+# zone stays as it is.
 # timezone=auto
 # timezone=America/Los_Angeles
 
@@ -30,15 +30,15 @@
 # start_url=about:blank
 
 # Extra Chrome flags, whitespace-separated, appended as-is before start_url.
-# Empty means none. Do not eval. Do not put --remote-debugging-port here
-# in production (production never opens a debugging port).
+# Empty means none. The flags are split on whitespace, not evaluated. Leave
+# --remote-debugging-port out: the instance runs without a debugging port.
 # extra_flags=
 
 # Optional. If unset or empty, defaults to ~/.mirage/profiles/<profile>
 # user_data_dir=
 
 # Expected VPS public IPv4 from the imported Mirage profile.
-# mirage-launch resolves the current egress IPv4 and refuses to start
-# (unless --force) when it differs: tunnel not active or wrong node.
+# mirage-launch resolves the current egress IPv4 and stops when it differs
+# (unless --force): the tunnel is not active or the node is wrong.
 # timezone=auto is resolved only after this check passes.
 # expect_egress=

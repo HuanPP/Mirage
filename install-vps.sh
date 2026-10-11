@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mirage VPS installer. Debian 12 / Ubuntu 22.04+, amd64 or arm64.
-# Never modifies existing sing-box, xray, or anytls services.
+# Existing sing-box, xray and other proxy services are left as they are.
 set -euo pipefail
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
@@ -53,7 +53,7 @@ Usage: sudo ./install-vps.sh [options]
        sudo ./install-vps.sh --help
 
 One-command VPS install for Mirage (mirage-syn, optional mirage-rtt, a
-separate mirage-singbox.service). Never touches existing proxy services.
+separate mirage-singbox.service). Existing proxy services are left alone.
 
   --port N       Listen port. Default: 443 if free, else first free of
                  8443, 2053, 2083, 2087, 2096. Refuses if the chosen port
@@ -61,16 +61,15 @@ separate mirage-singbox.service). Never touches existing proxy services.
   --sni HOST[:PORT]
                  REALITY handshake server (default www.microsoft.com:443).
   --profile NAME Short name written into the client profile (default mirage).
-  --no-rtt       Do not attach mirage-rtt / qdisc. Still prints a
+  --no-rtt       Skip mirage-rtt and the qdisc change. Still prints a
                  mirage-rtt install --dry-run plan.
-  --dry-run      Print the plan; do not change the system.
+  --dry-run      Print the plan without changing the system.
   --show-client  Reprint /etc/mirage/client/mirage.yaml
   --status       Units, nft, BPF, qdisc, wscale, optional RTT, SYN self-test.
   --uninstall    Revert exactly what this installer did.
   --help         Show this help.
 
-The cloud firewall must allow TCP <port> inbound. This script never changes
-cloud firewalls.
+Open TCP <port> in your cloud firewall; the script manages only this machine.
 EOF
 }
 
@@ -188,7 +187,7 @@ detect_iface() {
     MSS=1460
   fi
   if (( MTU < 1500 )); then
-    warn "egress MTU is ${MTU}; SYN will announce mss ${MSS} instead of the macOS-typical 1460. Raise the MTU on GCP with: gcloud compute networks update <vpc> --mtu=1500 then reboot the instance. Never announce an MSS larger than mtu-40 (blackhole risk)."
+    warn "egress MTU is ${MTU}; SYN will announce mss ${MSS} instead of the macOS-typical 1460. Raise the MTU on GCP with: gcloud compute networks update <vpc> --mtu=1500 then reboot the instance. The SYN announces at most mtu-40 so segments are not blackholed."
   fi
 }
 
@@ -699,8 +698,7 @@ print_client_and_reminder() {
   fi
   echo '========================================================='
   echo
-  echo "REMINDER: the cloud firewall must allow TCP ${PORT} inbound."
-  echo 'This script never changes cloud firewalls.'
+  echo "Open TCP ${PORT} in your cloud firewall; this script manages only this machine."
   echo "sing-box client JSON: ${ETC_DIR}/client/sing-box-client.json"
   echo "Reprint later: sudo $0 --show-client"
 }

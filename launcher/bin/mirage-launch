@@ -1,26 +1,21 @@
 #!/usr/bin/env zsh
-# mirage-launch -- start stock Google Chrome with a throwaway profile and TZ.
+# mirage-launch: start stock Google Chrome in its own profile, with the time
+# zone and language matched to the VPS egress.
 #
-# TZ is the production timezone mechanism: Chrome ICU on this macOS honors TZ
-# when the Chrome binary is exec'd directly with TZ set in its environment.
-# Production never opens a remote-debugging port. Do not use `open` to launch
-# (it may drop or not preserve env); this script exec's the binary itself.
+# Chrome on macOS honors TZ when its binary is exec'd directly, so the script
+# does that instead of using `open`, which drops the environment. The instance
+# has no remote-debugging port.
 #
-# A manual system-wide alternative is `sudo systemsetup -settimezone <zone>`.
-# This script never runs that command, never writes /etc/localtime, and never
-# changes the Mac's timezone.
+# What it does:
+#   - reads ~/.config/mirage/launcher.conf (or MIRAGE_LAUNCHER_CONF)
+#   - creates the Chrome user-data-dir if missing
+#   - execs stock Google Chrome with TZ, --lang, --accept-lang and a few native switches
 #
-# What it changes:
-#   - Reads ~/.config/mirage/launcher.conf (or MIRAGE_LAUNCHER_CONF)
-#   - Creates the Chrome user-data-dir if missing (mkdir -p)
-#   - Exec's stock Google Chrome with TZ, --lang, --accept-lang, a few native switches
-#
-# What it never touches:
-#   - The owner's existing Chrome profile / running Chrome
-#   - System timezone (never systemsetup, never /etc/localtime)
-#   - Network settings, mihomo, sing-box, routes, DNS
-#   - No extensions, no JS injection, no fingerprint spoofing
-#   - Production path never opens a remote-debugging port
+# What it leaves alone:
+#   - your existing Chrome profile and any running Chrome
+#   - the system time zone (`sudo systemsetup -settimezone <zone>` is the
+#     system-wide alternative, and this script does not run it)
+#   - network settings, mihomo, sing-box, routes and DNS
 
 emulate -R zsh
 set -euo pipefail
@@ -44,16 +39,16 @@ usage() {
   print -r -- 'Usage: mirage-launch [--print|--check] [--force] [--help]'
   print -r -- ''
   print -r -- '  (no args)   Start Chrome with the resolved profile, timezone, and flags.'
-  print -r -- '  --print     Print resolved settings and command; do not start Chrome.'
+  print -r -- '  --print     Print resolved settings and command, then exit.'
   print -r -- '  --check     Print resolved timezone, egress IPv4, and IPv6 leak warning.'
   print -r -- '  --force     Skip the expect_egress check (tunnel/node mismatch).'
   print -r -- '  --help      Show this help.'
   print -r -- ''
   print -r -- 'Config: ~/.config/mirage/launcher.conf  (override with MIRAGE_LAUNCHER_CONF)'
-  print -r -- 'Missing config is OK; documented defaults are used.'
+  print -r -- 'Without a config file the documented defaults apply.'
   print -r -- 'If expect_egress is set, the current egress IPv4 must match it before start'
   print -r -- '(message: tunnel not active or wrong node). timezone=auto is resolved only'
-  print -r -- 'after that check passes. Production never opens a debugging port.'
+  print -r -- 'after that check passes. The instance has no debugging port.'
 }
 
 trim() {

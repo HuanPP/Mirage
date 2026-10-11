@@ -1,0 +1,56 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "udp",
+        "tag": "local",
+        "server": "8.8.8.8"
+      }
+    ],
+    "strategy": "ipv4_only",
+    "final": "local"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "in",
+      "listen": "0.0.0.0",
+      "listen_port": __LISTEN_PORT__,
+      "users": [
+        {
+          "uuid": "__UUID__",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "__SNI_HOST__",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "__SNI_HOST__",
+            "server_port": __SNI_PORT__
+          },
+          "private_key": "__PRIVATE_KEY__",
+          "short_id": [
+            "__SHORT_ID__"
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct",
+      "routing_mark": 19785,
+      "domain_resolver": {
+        "server": "local",
+        "strategy": "ipv4_only"
+      }
+    }
+  ]
+}

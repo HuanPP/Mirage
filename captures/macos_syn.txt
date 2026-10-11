@@ -1,0 +1,15 @@
+Real macOS 15.7 (arm64) SYN, captured with tcpdump -nn -vvv on the receiving VPS.
+Addresses replaced with RFC 5737 documentation addresses; every TCP/IP field relevant
+to fingerprinting is unchanged. ttl 49 is the initial 64 minus the hops on the path.
+mss 1440 reflects the sender's access link; a typical home Mac on Ethernet/Wi-Fi sends 1460.
+
+tcpdump: listening on ens4, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+06:30:25.494844 IP (tos 0x0, ttl 49, id 0, offset 0, flags [DF], proto TCP (6), length 64)
+    198.51.100.7.61790 > 203.0.113.10.22: Flags [S], cksum 0xd4ac (correct), seq 2749333069, win 65535, options [mss 1440,nop,wscale 6,nop,nop,TS val 1231715204 ecr 0,sackOK,eol], length 0
+06:30:29.503252 IP (tos 0x0, ttl 49, id 0, offset 0, flags [DF], proto TCP (6), length 64)
+    198.51.100.7.61797 > 203.0.113.10.22: Flags [S], cksum 0x6b00 (correct), seq 2677917896, win 65535, options [mss 1440,nop,wscale 6,nop,nop,TS val 3495303172 ecr 0,sackOK,eol], length 0
+06:30:33.894656 IP (tos 0x0, ttl 49, id 0, offset 0, flags [DF], proto TCP (6), length 64)
+    198.51.100.7.61803 > 203.0.113.10.22: Flags [S], cksum 0xc580 (correct), seq 4062524302, win 65535, options [mss 1440,nop,wscale 6,nop,nop,TS val 1459124622 ecr 0,sackOK,eol], length 0
+3 packets captured
+3 packets received by filter
+0 packets dropped by kernel

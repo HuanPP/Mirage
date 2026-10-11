@@ -1,0 +1,7 @@
+mark: 0x4d49
+ipv6: block
+syn:
+  enabled: true
+  queue_num: 4949
+  profile: macos
+  mss: 1460

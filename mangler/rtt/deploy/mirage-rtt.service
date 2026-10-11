@@ -1,0 +1,25 @@
+[Unit]
+Description=Mirage per-flow TCP RTT shaping
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/mirage-rtt run -c /etc/mirage/mangler.yaml
+ExecStopPost=/usr/local/bin/mirage-rtt uninstall -c /etc/mirage/mangler.yaml
+Restart=on-failure
+RestartSec=3
+# Linux 6.1: SCHED_CLS loading needs CAP_BPF and CAP_NET_ADMIN. This program
+# uses no tracing/perf helpers, so CAP_PERFMON is unnecessary (syscall.c).
+CapabilityBoundingSet=CAP_BPF CAP_NET_ADMIN
+AmbientCapabilities=CAP_BPF CAP_NET_ADMIN
+LimitMEMLOCK=infinity
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/sys/fs/bpf /var/lib/mirage
+StateDirectory=mirage
+
+[Install]
+WantedBy=multi-user.target

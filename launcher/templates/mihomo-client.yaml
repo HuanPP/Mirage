@@ -1,0 +1,73 @@
+# Mirage macOS client template for mihomo (Clash Meta).
+# This file is a copy-and-fill template. Copy it out of the repo and replace
+# the SERVER, PORT, UUID, PUBLIC_KEY, SHORT_ID, SNI, TIMEZONE, PROFILE
+# placeholders with real values, then pass the copy to mihomo.
+# It does not write anything to disk by itself and does not change the
+# running system.
+# It never touches system DNS files (/etc/resolv.conf, mDNSResponder),
+# other apps, the VPS, or Chrome.
+#
+# The top-level `mirage:` mapping is extra metadata for mirage-launch.
+# mihomo ignores unknown top-level keys (verified with `mihomo -t -f`).
+
+mixed-port: 7890
+allow-lan: false
+bind-address: "127.0.0.1"
+mode: rule
+log-level: warning
+ipv6: false
+
+tun:
+  enable: true
+  auto-route: true
+  strict-route: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: redir-host
+  prefer-h3: false
+  default-nameserver:
+    - 8.8.8.8
+  nameserver:
+    - https://8.8.8.8/dns-query#PROXY
+  proxy-server-nameserver:
+    - 8.8.8.8
+
+proxies:
+  - name: PROXY
+    type: vless
+    server: "<SERVER>"
+    port: <PORT>
+    uuid: "<UUID>"
+    network: tcp
+    tls: true
+    udp: true
+    flow: xtls-rprx-vision
+    servername: "<SNI>"
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: "<PUBLIC_KEY>"
+      short-id: "<SHORT_ID>"
+    ip-version: ipv4
+
+rules:
+  - AND,((NETWORK,udp),(DST-PORT,443)),REJECT
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  # <SERVER> in this CIDR must be the proxy's IPv4 address (not a hostname).
+  - IP-CIDR,<SERVER>/32,DIRECT,no-resolve
+  - MATCH,PROXY
+
+mirage:
+  version: 1
+  expect_egress: "<SERVER>"
+  timezone: "<TIMEZONE>"
+  lang: en-US
+  profile: "<PROFILE>"

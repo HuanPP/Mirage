@@ -1,0 +1,13 @@
+mark: 0x4d49
+ipv6: block
+rtt:
+  enabled: true
+  iface: ens4
+  base_delay_ms: auto
+  default_delay_ms: 160
+  jitter_ms: 8
+  jitter_rho: 0.9
+  min_delay_ms: 0
+  max_delay_ms: 600
+  client:
+    inbound_port: 443

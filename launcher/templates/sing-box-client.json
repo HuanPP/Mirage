@@ -1,0 +1,96 @@
+// Mirage macOS client template for sing-box 1.14.3.
+// This file is a copy-and-fill template. Copy it out of the repo and replace
+// the SERVER, PORT, UUID, PUBLIC_KEY, SHORT_ID, SNI placeholders with real
+// values, then pass the copy to sing-box.
+// It does not write anything to disk by itself and does not change the
+// running system.
+// It never touches system DNS files (/etc/resolv.conf, mDNSResponder),
+// other apps, the VPS, or Chrome.
+// <SERVER> in the DIRECT ip_cidr exception must be the proxy's IPv4 address.
+{
+  "log": {
+    "level": "warn"
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "https",
+        "tag": "remote",
+        "server": "8.8.8.8",
+        "path": "/dns-query",
+        "detour": "proxy"
+      },
+      {
+        "type": "udp",
+        "tag": "bootstrap",
+        "server": "8.8.8.8"
+      }
+    ],
+    "final": "remote",
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "address": [
+        "198.18.0.1/30"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "dns_mode": "hijack"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "<SERVER>",
+      "server_port": <PORT>,
+      "uuid": "<UUID>",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "<SNI>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "<PUBLIC_KEY>",
+          "short_id": "<SHORT_ID>"
+        }
+      },
+      "domain_resolver": "bootstrap"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": "bootstrap",
+    "final": "proxy",
+    "rules": [
+      {
+        "network": "udp",
+        "port": 443,
+        "action": "reject"
+      },
+      {
+        "ip_cidr": [
+          "127.0.0.0/8",
+          "10.0.0.0/8",
+          "172.16.0.0/12",
+          "192.168.0.0/16",
+          "169.254.0.0/16",
+          "<SERVER>/32"
+        ],
+        "action": "route",
+        "outbound": "direct"
+      }
+    ]
+  }
+}

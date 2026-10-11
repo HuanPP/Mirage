@@ -1,0 +1,425 @@
+#!/usr/bin/env zsh
+# mirage-launch -- start stock Google Chrome with a throwaway profile and TZ.
+#
+# TZ is the production timezone mechanism: Chrome ICU on this macOS honors TZ
+# when the Chrome binary is exec'd directly with TZ set in its environment.
+# Production never opens a remote-debugging port. Do not use `open` to launch
+# (it may drop or not preserve env); this script exec's the binary itself.
+#
+# A manual system-wide alternative is `sudo systemsetup -settimezone <zone>`.
+# This script never runs that command, never writes /etc/localtime, and never
+# changes the Mac's timezone.
+#
+# What it changes:
+#   - Reads ~/.config/mirage/launcher.conf (or MIRAGE_LAUNCHER_CONF)
+#   - Creates the Chrome user-data-dir if missing (mkdir -p)
+#   - Exec's stock Google Chrome with TZ, --lang, --accept-lang, a few native switches
+#
+# What it never touches:
+#   - The owner's existing Chrome profile / running Chrome
+#   - System timezone (never systemsetup, never /etc/localtime)
+#   - Network settings, mihomo, sing-box, routes, DNS
+#   - No extensions, no JS injection, no fingerprint spoofing
+#   - Production path never opens a remote-debugging port
+
+emulate -R zsh
+set -euo pipefail
+setopt extended_glob
+
+typeset profile timezone lang chrome start_url extra_flags user_data_dir expect_egress
+typeset -a extra_args chrome_args
+typeset force=0
+typeset egress_ip=''
+
+profile='us-west'
+timezone='auto'
+lang='en-US'
+chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+start_url='about:blank'
+extra_flags=''
+user_data_dir=''
+expect_egress=''
+
+usage() {
+  print -r -- 'Usage: mirage-launch [--print|--check] [--force] [--help]'
+  print -r -- ''
+  print -r -- '  (no args)   Start Chrome with the resolved profile, timezone, and flags.'
+  print -r -- '  --print     Print resolved settings and command; do not start Chrome.'
+  print -r -- '  --check     Print resolved timezone, egress IPv4, and IPv6 leak warning.'
+  print -r -- '  --force     Skip the expect_egress check (tunnel/node mismatch).'
+  print -r -- '  --help      Show this help.'
+  print -r -- ''
+  print -r -- 'Config: ~/.config/mirage/launcher.conf  (override with MIRAGE_LAUNCHER_CONF)'
+  print -r -- 'Missing config is OK; documented defaults are used.'
+  print -r -- 'If expect_egress is set, the current egress IPv4 must match it before start'
+  print -r -- '(message: tunnel not active or wrong node). timezone=auto is resolved only'
+  print -r -- 'after that check passes. Production never opens a debugging port.'
+}
+
+trim() {
+  local s=$1
+  s=${s#"${s%%[![:space:]]*}"}
+  s=${s%"${s##*[![:space:]]}"}
+  print -r -- "$s"
+}
+
+unquote_value() {
+  local v=$1
+  if (( ${#v} >= 2 )) && [[ "$v" == \"*\" ]]; then
+    v=${v#\"}
+    v=${v%\"}
+  elif (( ${#v} >= 2 )) && [[ "$v" == \'*\' ]]; then
+    v=${v#\'}
+    v=${v%\'}
+  fi
+  print -r -- "$v"
+}
+
+expand_tilde() {
+  local p=$1
+  if [[ "$p" == '~' ]]; then
+    print -r -- "$HOME"
+  elif [[ "$p" == '~/'* ]]; then
+    print -r -- "$HOME/${p#\~/}"
+  else
+    print -r -- "$p"
+  fi
+}
+
+shell_quote() {
+  local s=$1
+  local q
+  if [[ -n "$s" && "$s" != *[!A-Za-z0-9%+,.\/:=@_~-]* ]]; then
+    print -r -- "$s"
+    return
+  fi
+  q=$s
+  q=${q//\\/\\\\}
+  q=${q//\"/\\\"}
+  q=${q//\$/\\\$}
+  q=${q//\`/\\\`}
+  print -r -- "\"$q\""
+}
+
+is_valid_zone() {
+  local zone=$1
+  [[ -n "$zone" ]] || return 1
+  [[ "$zone" != *$'\n'* ]] || return 1
+  [[ "$zone" != *$'\r'* ]] || return 1
+  [[ "$zone" != *$'\t'* ]] || return 1
+  [[ "$zone" != *' '* ]] || return 1
+  [[ "$zone" != *..* ]] || return 1
+  [[ "$zone" != /* ]] || return 1
+  [[ -f "/usr/share/zoneinfo/$zone" ]] || return 1
+  return 0
+}
+
+load_conf() {
+  local file=$1
+  local line key value
+  [[ -f "$file" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line=${line%$'\r'}
+    line=$(trim "$line")
+    [[ -z "$line" ]] && continue
+    [[ "$line" == \#* ]] && continue
+    if [[ "$line" != *=* ]]; then
+      print -u2 -- "error: invalid config line (expected key=value): $line"
+      exit 1
+    fi
+    key=$(trim "${line%%=*}")
+    value=$(trim "${line#*=}")
+    value=$(unquote_value "$value")
+    case "$key" in
+      profile) profile=$value ;;
+      timezone) timezone=$value ;;
+      lang) lang=$value ;;
+      chrome) chrome=$value ;;
+      start_url) start_url=$value ;;
+      extra_flags) extra_flags=$value ;;
+      user_data_dir) user_data_dir=$value ;;
+      expect_egress) expect_egress=$value ;;
+      *)
+        print -u2 -- "error: unknown config key: $key"
+        exit 1
+        ;;
+    esac
+  done < "$file"
+}
+
+json_timezone() {
+  local body=$1 zone
+  zone=''
+  if [[ "$body" == *'"timezone"'* ]]; then
+    zone=${body#*\"timezone\"}
+    zone=${zone#*:}
+    zone=${zone#*\"}
+    zone=${zone%%\"*}
+  fi
+  trim "$(print -r -- "$zone" | tr -d '\r' | head -n 1)"
+}
+
+plain_timezone() {
+  local body=$1
+  trim "$(print -r -- "$body" | tr -d '\r' | head -n 1)"
+}
+
+fetch_url() {
+  curl -4 -sS -L --max-time 5 "$1" 2>/dev/null || true
+}
+
+resolve_timezone() {
+  local body zone
+  if [[ "$timezone" != 'auto' ]]; then
+    if ! is_valid_zone "$timezone"; then
+      print -u2 -- "error: invalid timezone '${timezone}' (must be an IANA name present as a file under /usr/share/zoneinfo; no '..', no leading slash)"
+      exit 1
+    fi
+    return
+  fi
+
+  body=$(fetch_url 'https://ipinfo.io/timezone')
+  zone=$(plain_timezone "$body")
+  if is_valid_zone "$zone"; then
+    timezone=$zone
+    return
+  fi
+
+  body=$(fetch_url 'https://ipapi.co/timezone')
+  zone=$(plain_timezone "$body")
+  if is_valid_zone "$zone"; then
+    timezone=$zone
+    return
+  fi
+
+  body=$(fetch_url 'https://worldtimeapi.org/api/ip')
+  zone=$(json_timezone "$body")
+  if is_valid_zone "$zone"; then
+    timezone=$zone
+    return
+  fi
+
+  # Extra plain-text fallback; the three URLs above are often rate-limited.
+  body=$(fetch_url 'http://ip-api.com/line?fields=timezone')
+  zone=$(plain_timezone "$body")
+  if is_valid_zone "$zone"; then
+    timezone=$zone
+    return
+  fi
+
+  print -u2 -- 'error: timezone=auto could not obtain a valid IANA zone from:'
+  print -u2 -- '  https://ipinfo.io/timezone'
+  print -u2 -- '  https://ipapi.co/timezone'
+  print -u2 -- '  https://worldtimeapi.org/api/ip'
+  print -u2 -- '  http://ip-api.com/line?fields=timezone'
+  print -u2 -- "error: not falling back to this Mac's timezone; set timezone=<IANA> in the config"
+  exit 1
+}
+
+is_ipv4() {
+  local ip=$1
+  [[ "$ip" == [0-9]##.[0-9]##.[0-9]##.[0-9]## ]]
+}
+
+resolve_egress_ipv4() {
+  local body ip
+  body=$(curl -4 -s --max-time 4 'https://ipinfo.io/ip' || true)
+  ip=$(trim "$(print -r -- "$body" | tr -d '\r')")
+  if is_ipv4 "$ip"; then
+    print -r -- "$ip"
+    return 0
+  fi
+  body=$(curl -4 -s --max-time 4 'https://ifconfig.co/ip' || true)
+  ip=$(trim "$(print -r -- "$body" | tr -d '\r')")
+  if is_ipv4 "$ip"; then
+    print -r -- "$ip"
+    return 0
+  fi
+  return 1
+}
+
+split_extra_flags() {
+  extra_args=()
+  [[ -z "$extra_flags" ]] && return 0
+  setopt local_options noglob
+  extra_args=(${=extra_flags})
+}
+
+build_chrome_args() {
+  chrome_args=(
+    "--user-data-dir=${user_data_dir}"
+    "--lang=${lang}"
+    "--accept-lang=${lang},en"
+    --disable-quic
+    --enforce-webrtc-ip-permission-check
+    --no-first-run
+    --no-default-browser-check
+  )
+  if (( ${#extra_args[@]} > 0 )); then
+    chrome_args+=("${extra_args[@]}")
+  fi
+  chrome_args+=("$start_url")
+}
+
+print_resolved() {
+  local -a cmd_parts
+  local a
+  print -r -- "profile=${profile}"
+  print -r -- "timezone=${timezone}"
+  print -r -- "lang=${lang}"
+  print -r -- "chrome=${chrome}"
+  print -r -- "user_data_dir=${user_data_dir}"
+  print -r -- "expect_egress=${expect_egress}"
+  print -r -- "egress_ip=${egress_ip}"
+  print -r -- "TZ=${timezone}"
+  cmd_parts=("TZ=${timezone}" "$(shell_quote "$chrome")")
+  for a in "${chrome_args[@]}"; do
+    cmd_parts+=("$(shell_quote "$a")")
+  done
+  print -r -- "command: ${cmd_parts[*]}"
+}
+
+require_expect_egress() {
+  local ip
+  if [[ -z "$expect_egress" ]]; then
+    if ip=$(resolve_egress_ipv4); then
+      egress_ip=$ip
+    else
+      egress_ip=''
+    fi
+    return 0
+  fi
+  if ! ip=$(resolve_egress_ipv4); then
+    print -u2 -- "error: tunnel not active or wrong node (could not resolve egress IPv4; expect_egress=${expect_egress})"
+    exit 1
+  fi
+  egress_ip=$ip
+  if [[ "$force" -eq 1 ]]; then
+    return 0
+  fi
+  if [[ "$ip" != "$expect_egress" ]]; then
+    print -u2 -- "error: tunnel not active or wrong node (egress ${ip} != expect_egress ${expect_egress})"
+    exit 1
+  fi
+}
+
+run_check() {
+  local ip v6
+  print -r -- "timezone=${timezone}"
+  if ip=$(resolve_egress_ipv4); then
+    print -r -- "egress_ip=${ip}"
+  else
+    print -u2 -- 'error: could not resolve egress IPv4 from https://ipinfo.io/ip or https://ifconfig.co/ip'
+    print -r -- 'egress_ip='
+    v6=$(curl -6 -s --max-time 5 'https://ifconfig.co/ip' || true)
+    v6=$(trim "$(print -r -- "$v6" | tr -d '\r')")
+    if [[ "$v6" == *:* ]]; then
+      print -r -- "warning: IPv6 is reachable on this Mac (${v6}) and may leak the real network; v1 is IPv4-only"
+    fi
+    exit 1
+  fi
+  v6=$(curl -6 -s --max-time 5 'https://ifconfig.co/ip' || true)
+  v6=$(trim "$(print -r -- "$v6" | tr -d '\r')")
+  if [[ "$v6" == *:* ]]; then
+    print -r -- "warning: IPv6 is reachable on this Mac (${v6}) and may leak the real network; v1 is IPv4-only"
+  fi
+}
+
+require_chrome() {
+  if [[ ! -e "$chrome" ]]; then
+    print -u2 -- "error: chrome binary not found: ${chrome}"
+    exit 1
+  fi
+  if [[ ! -x "$chrome" ]]; then
+    print -u2 -- "error: chrome binary is not executable: ${chrome}"
+    exit 1
+  fi
+}
+
+mode='start'
+while (( $# > 0 )); do
+  case "$1" in
+    --print)
+      mode='print'
+      ;;
+    --check)
+      mode='check'
+      ;;
+    --force)
+      force=1
+      ;;
+    --help|-h)
+      mode='help'
+      ;;
+    *)
+      print -u2 -- "error: unknown argument: $1"
+      usage >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+if [[ "$mode" == 'help' && "$force" -eq 1 ]]; then
+  print -u2 -- 'error: --help cannot be combined with other flags'
+  exit 1
+fi
+
+if [[ "$mode" == 'help' ]]; then
+  usage
+  exit 0
+fi
+
+conf=${MIRAGE_LAUNCHER_CONF:-"$HOME/.config/mirage/launcher.conf"}
+load_conf "$conf"
+
+if [[ -z "$profile" ]]; then
+  print -u2 -- 'error: profile is empty'
+  exit 1
+fi
+if [[ -z "$timezone" ]]; then
+  print -u2 -- 'error: timezone is empty'
+  exit 1
+fi
+if [[ -z "$lang" ]]; then
+  print -u2 -- 'error: lang is empty'
+  exit 1
+fi
+if [[ -z "$chrome" ]]; then
+  print -u2 -- 'error: chrome is empty'
+  exit 1
+fi
+if [[ -z "$start_url" ]]; then
+  print -u2 -- 'error: start_url is empty'
+  exit 1
+fi
+
+chrome=$(expand_tilde "$chrome")
+if [[ -z "$user_data_dir" ]]; then
+  user_data_dir="$HOME/.mirage/profiles/${profile}"
+else
+  user_data_dir=$(expand_tilde "$user_data_dir")
+fi
+
+require_expect_egress
+resolve_timezone
+split_extra_flags
+build_chrome_args
+
+case "$mode" in
+  print)
+    require_chrome
+    print_resolved
+    ;;
+  check)
+    run_check
+    ;;
+  start)
+    require_chrome
+    mkdir -p "$user_data_dir"
+    TZ="$timezone" exec "$chrome" "${chrome_args[@]}"
+    ;;
+  *)
+    print -u2 -- "error: internal: unknown mode ${mode}"
+    exit 1
+    ;;
+esac

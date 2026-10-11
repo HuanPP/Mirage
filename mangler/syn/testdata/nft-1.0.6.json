@@ -1,0 +1,19 @@
+{"nftables": [
+  {"metainfo": {"version": "1.0.6", "json_schema_version": 1}},
+  {"table": {"family": "inet", "name": "mirage_syn", "handle": 3}},
+  {"chain": {"family": "inet", "table": "mirage_syn", "name": "outbound", "handle": 1, "type": "filter", "hook": "postrouting", "prio": 110, "policy": "accept"}},
+  {"rule": {"family": "inet", "table": "mirage_syn", "chain": "outbound", "handle": 2, "expr": [
+    {"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "protocol"}}, "right": "tcp"}},
+    {"match": {"op": "==", "left": {"&": [{"payload": {"protocol": "tcp", "field": "flags"}}, ["syn", "ack"]]}, "right": "syn"}},
+    {"match": {"op": "==", "left": {"meta": {"key": "mark"}}, "right": 1836275969}},
+    {"counter": {"packets": 0, "bytes": 0}},
+    {"queue": {"num": 4949, "flags": "bypass"}}
+  ]}},
+  {"rule": {"family": "inet", "table": "mirage_syn", "chain": "outbound", "handle": 3, "expr": [
+    {"match": {"op": "==", "left": {"meta": {"key": "nfproto"}}, "right": "ipv6"}},
+    {"match": {"op": "==", "left": {"&": [{"payload": {"protocol": "tcp", "field": "flags"}}, ["syn", "ack"]]}, "right": "syn"}},
+    {"match": {"op": "==", "left": {"meta": {"key": "mark"}}, "right": 1836275969}},
+    {"counter": {"packets": 0, "bytes": 0}},
+    {"drop": null}
+  ]}}
+]}

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e7e2d6" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="fade" x1="540" y1="0" x2="760" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="gridmask"><rect x="540" y="0" width="740" height="640" fill="url(#fade)"/></mask>
+  </defs>
+
+  <rect width="1280" height="640" fill="#faf8f3"/>
+  <rect x="540" y="0" width="740" height="640" fill="url(#grid)" mask="url(#gridmask)"/>
+  <rect x="0" y="0" width="10" height="640" fill="#1f3a5f"/>
+
+  <!-- left column -->
+  <text x="84" y="250" font-family="Baskerville, 'Hoefler Text', Palatino, Georgia, serif" font-size="112" font-weight="700" letter-spacing="-2"><tspan fill="#8b3a3a">Mir</tspan><tspan fill="#1b2236">age</tspan></text>
+  <text x="88" y="330" font-family="Baskerville, 'Hoefler Text', Palatino, Georgia, serif" font-size="32" font-style="italic" fill="#1b2236">Every layer tells the same story.</text>
+  <rect x="88" y="364" width="190" height="2" fill="#8b3a3a"/>
+  <text x="88" y="410" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" letter-spacing="2.2" fill="#5b6478">DARWIN SYN LAYOUT • EBPF RTT SHAPING • STOCK CHROME</text>
+  <text x="88" y="588" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" letter-spacing="2.2" fill="#6b7386">OPEN SOURCE • GPL-3.0 • GITHUB.COM/HUANPP/MIRAGE</text>
+
+  <!-- figure 1 -->
+  <text x="700" y="130" font-family="Baskerville, 'Hoefler Text', Palatino, Georgia, serif" font-size="22" font-style="italic" fill="#1b2236"><tspan font-family="'Helvetica Neue', Helvetica, sans-serif" font-style="normal" font-size="11" letter-spacing="2.4" fill="#8b3a3a">FIG. 1</tspan>   The SYN, reordered.</text>
+
+  <text x="760" y="186" font-family="'Helvetica Neue', Helvetica, sans-serif" font-size="11" letter-spacing="2.2" fill="#8c8576">VPS DEFAULT</text>
+  <text x="1188" y="186" text-anchor="end" font-family="Baskerville, 'Hoefler Text', Palatino, Georgia, serif" font-size="16" font-style="italic" fill="#8c8576">reads as Linux</text>
+  <g font-family="Menlo, 'SF Mono', monospace" font-size="12" text-anchor="middle" fill="#8c8576">
+    <g class="cell"><rect x="760" y="198" width="56" height="28" fill="none" stroke="#b9b3a4"/><text x="788" y="216">MSS</text></g>
+    <g class="cell"><rect x="822" y="198" width="56" height="28" fill="none" stroke="#b9b3a4"/><text x="850" y="216">SACK</text></g>
+    <g class="cell"><rect x="884" y="198" width="44" height="28" fill="none" stroke="#b9b3a4"/><text x="906" y="216">TS</text></g>
+    <g class="cell"><rect x="934" y="198" width="44" height="28" fill="none" stroke="#b9b3a4"/><text x="956" y="216">NOP</text></g>
+    <g class="cell"><rect x="984" y="198" width="52" height="28" fill="none" stroke="#b9b3a4"/><text x="1010" y="216">WS 7</text></g>
+  </g>
+
+  <text x="760" y="262" font-family="'Helvetica Neue', Helvetica, sans-serif" font-size="11" letter-spacing="2.2" fill="#1f3a5f">MIRAGE EGRESS</text>
+  <text x="1188" y="262" text-anchor="end" font-family="Baskerville, 'Hoefler Text', Palatino, Georgia, serif" font-size="16" font-style="italic" fill="#1f3a5f">reads as Mac OS X</text>
+  <g font-family="Menlo, 'SF Mono', monospace" font-size="12" text-anchor="middle" fill="#1b2236">
+    <g class="cell"><rect x="760" y="274" width="56" height="28" fill="#fff" fill-opacity="0.7" stroke="#1f3a5f"/><text x="788" y="292">MSS</text></g>
+    <g class="cell"><rect x="822" y="274" width="44" height="28" fill="#fff" fill-opacity="0.7" stroke="#1f3a5f"/><text x="844" y="292">NOP</text></g>
+    <g class="cell"><rect x="872" y="274" width="52" height="28" fill="#fff" fill-opacity="0.7" stroke="#8b3a3a"/><text x="898" y="292" fill="#8b3a3a" font-weight="700">WS 6</text></g>
+    <g class="cell"><rect x="930" y="274" width="44" height="28" fill="#fff" fill-opacity="0.7" stroke="#1f3a5f"/><text x="952" y="292">NOP</text></g>
+    <g class="cell"><rect x="980" y="274" width="44" height="28" fill="#fff" fill-opacity="0.7" stroke="#1f3a5f"/><text x="1002" y="292">NOP</text></g>
+    <g class="cell"><rect x="1030" y="274" width="44" height="28" fill="#fff" fill-opacity="0.7" stroke="#1f3a5f"/><text x="1052" y="292">TS</text></g>
+    <g class="cell"><rect x="1080" y="274" width="56" height="28" fill="#fff" fill-opacity="0.7" stroke="#1f3a5f"/><text x="1108" y="292">SACK</text></g>
+    <g class="cell"><rect x="1142" y="274" width="46" height="28" fill="#fff" fill-opacity="0.7" stroke="#1f3a5f"/><text x="1165" y="292">EOL</text></g>
+  </g>
+
+  <!-- figure 2 -->
+  <text x="700" y="392" font-family="Baskerville, 'Hoefler Text', Palatino, Georgia, serif" font-size="22" font-style="italic" fill="#1b2236"><tspan font-family="'Helvetica Neue', Helvetica, sans-serif" font-style="normal" font-size="11" letter-spacing="2.4" fill="#8b3a3a">FIG. 2</tspan>   The round trip, restored.</text>
+  <circle cx="762" cy="440" r="3.5" fill="#8c8576"/>
+  <text x="782" y="445" font-family="Menlo, 'SF Mono', monospace" font-size="13" fill="#8c8576">0.3 ms</text>
+  <path d="M 760 508 H 1160 M 760 500 V 516 M 1160 500 V 516" fill="none" stroke="#1f3a5f" stroke-width="1.5"/>
+  <text x="960" y="496" text-anchor="middle" font-family="Baskerville, 'Hoefler Text', Palatino, Georgia, serif" font-size="24" font-weight="700" fill="#1b2236">157 ms</text>
+</svg>
